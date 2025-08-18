@@ -1,1 +1,3 @@
-FOLDER 1 CODE TO EXTRACT IMAGES
+FOLDE CONTAINS 2 CODES
+hi.py-normal mapping of images
+hi1_test.py-linked with flutter 
