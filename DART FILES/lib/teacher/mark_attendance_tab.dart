@@ -70,7 +70,7 @@ class _MarkAttendanceTabState extends State<MarkAttendanceTab> {
     try {
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse("https://smart-attendance-system-using-yolov8.onrender.com//upload"), // update to your backend
+        Uri.parse("http://192.168.18.9:5000/upload"), // update to your backend
       );
       request.files.add(
         await http.MultipartFile.fromPath(
