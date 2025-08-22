@@ -1,9 +1,1 @@
-Flask
-gunicorn
-torch
-torchvision
-ultralytics
-opencv-python
-cvzone
-pandas
-numpy
+Flask==2.3.2
