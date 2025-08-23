@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
-import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
 
 class MarkAttendanceTab extends StatefulWidget {
   const MarkAttendanceTab({super.key});
@@ -17,6 +17,7 @@ class _MarkAttendanceTabState extends State<MarkAttendanceTab> {
   List<CameraDescription>? _cameras;
   XFile? _capturedImage;
   bool _isUploading = false;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -44,24 +45,32 @@ class _MarkAttendanceTabState extends State<MarkAttendanceTab> {
       _capturedImage = rawImage;
     });
 
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Image Captured Successfully!")),
     );
   }
 
+  Future<void> _pickFromGallery(BuildContext context) async {
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _capturedImage = pickedFile;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Image Selected from Gallery!")),
+      );
+    }
+  }
+
   Future<void> _uploadImage(BuildContext context) async {
     if (_capturedImage == null) return;
 
-    if (!mounted) return;
     setState(() => _isUploading = true);
 
     try {
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse(
-          "http://10.201.12.211:5000/upload",
-        ), //remember to change link here else no work
+        Uri.parse("http://192.168.18.9:5000/upload"), // update to your backend
       );
       request.files.add(
         await http.MultipartFile.fromPath(
@@ -73,32 +82,20 @@ class _MarkAttendanceTabState extends State<MarkAttendanceTab> {
 
       var response = await request.send();
 
-      if (!mounted) return;
       setState(() => _isUploading = false);
 
       final snackMsg = response.statusCode == 200
           ? 'Attendance marked successfully!'
           : 'Upload failed!';
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(snackMsg)));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(snackMsg)),
+      );
     } catch (e) {
-      if (!mounted) return;
       setState(() => _isUploading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
-  }
-
-  void _retakeImage() {
-    setState(() {
-      _capturedImage = null; // clear last image
-    });
   }
 
   @override
@@ -124,16 +121,14 @@ class _MarkAttendanceTabState extends State<MarkAttendanceTab> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            if (_capturedImage == null)
-              ElevatedButton(
-                onPressed: () => _captureImage(context),
-                child: const Text('Capture Image'),
-              )
-            else
-              ElevatedButton(
-                onPressed: _retakeImage,
-                child: const Text('Retake'),
-              ),
+            ElevatedButton(
+              onPressed: () => _captureImage(context),
+              child: const Text('Capture Image'),
+            ),
+            ElevatedButton(
+              onPressed: () => _pickFromGallery(context),
+              child: const Text('Upload from Gallery'),
+            ),
             ElevatedButton(
               onPressed: _capturedImage == null || _isUploading
                   ? null
