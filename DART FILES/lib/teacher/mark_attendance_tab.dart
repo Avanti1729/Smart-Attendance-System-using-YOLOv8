@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart';
 import 'package:image_picker/image_picker.dart';
+import 'attendance_grid.dart';
+import 'api_service.dart';
 
 class MarkAttendanceTab extends StatefulWidget {
   const MarkAttendanceTab({super.key});
@@ -16,85 +16,96 @@ class _MarkAttendanceTabState extends State<MarkAttendanceTab> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   XFile? _capturedImage;
-  bool _isUploading = false;
-  final ImagePicker _picker = ImagePicker();
+  String selectedSection = "A";
+  Map<int, bool> attendance = {};
 
   @override
   void initState() {
     super.initState();
     _initializeCamera();
+    _initializeAttendance();
+  }
+
+  void _initializeAttendance() {
+    attendance.clear();
+    int start = selectedSection == "A"
+        ? 1
+        : selectedSection == "B"
+        ? 65
+        : 128;
+    int end = selectedSection == "A"
+        ? 64
+        : selectedSection == "B"
+        ? 127
+        : 200;
+    for (var i = start; i <= end; i++) attendance[i] = false;
+    setState(() {});
   }
 
   Future<void> _initializeCamera() async {
     _cameras = await availableCameras();
     if (_cameras!.isNotEmpty) {
-      _controller = CameraController(_cameras![0], ResolutionPreset.max);
+      _controller = CameraController(_cameras![0], ResolutionPreset.high);
       await _controller!.initialize();
       if (!mounted) return;
       setState(() {});
     }
   }
 
-  Future<void> _captureImage(BuildContext context) async {
+  Future<void> _captureImage() async {
     if (_controller == null || !_controller!.value.isInitialized) return;
-
     final rawImage = await _controller!.takePicture();
-
-    if (!mounted) return;
-    setState(() {
-      _capturedImage = rawImage;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Image Captured Successfully!")),
-    );
+    setState(() => _capturedImage = rawImage);
   }
 
-  Future<void> _pickFromGallery(BuildContext context) async {
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _capturedImage = pickedFile;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Image Selected from Gallery!")),
-      );
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) setState(() => _capturedImage = XFile(picked.path));
+  }
+
+  Future<void> _recognizeFaces() async {
+    if (_capturedImage == null) return;
+    try {
+      final file = File(_capturedImage!.path);
+      final res = await ApiService.recognizeFace(file);
+      if (res['marked_rolls'] != null) {
+        for (var roll in res['marked_rolls']) {
+          if (attendance.containsKey(roll)) attendance[roll] = true;
+        }
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message'] ?? "Attendance updated")),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
-  Future<void> _uploadImage(BuildContext context) async {
-    if (_capturedImage == null) return;
+  void _toggleRoll(int roll) {
+    setState(() => attendance[roll] = !(attendance[roll] ?? false));
+  }
 
-    setState(() => _isUploading = true);
-
+  void _saveAttendance() async {
+    List<int> presentRolls = [];
+    attendance.forEach((roll, present) {
+      if (present) presentRolls.add(roll);
+    });
     try {
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse("http://192.168.18.9:5000/upload"), // update to your backend
+      final res = await ApiService.saveAttendance(
+        presentRolls,
+        selectedSection,
       );
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'file',
-          _capturedImage!.path,
-          filename: basename(_capturedImage!.path),
-        ),
-      );
-
-      var response = await request.send();
-
-      setState(() => _isUploading = false);
-
-      final snackMsg = response.statusCode == 200
-          ? 'Attendance marked successfully!'
-          : 'Upload failed!';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(snackMsg)),
+        SnackBar(content: Text(res['message'] ?? "Attendance saved")),
       );
     } catch (e) {
-      setState(() => _isUploading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Error saving attendance")));
     }
   }
 
@@ -112,41 +123,59 @@ class _MarkAttendanceTabState extends State<MarkAttendanceTab> {
 
     return Column(
       children: [
+        // Section toggle buttons
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: ["A", "B", "C", "All"].map((sec) {
+            return ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: selectedSection == sec
+                    ? Colors.blue
+                    : Colors.grey,
+              ),
+              onPressed: () {
+                selectedSection = sec;
+                _initializeAttendance();
+              },
+              child: Text(sec),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 10),
+
+        // Camera preview or selected image
         Expanded(
           child: _capturedImage == null
               ? CameraPreview(_controller!)
               : Image.file(File(_capturedImage!.path), fit: BoxFit.contain),
         ),
         const SizedBox(height: 10),
+
+        // Buttons
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             ElevatedButton(
-              onPressed: () => _captureImage(context),
-              child: const Text('Capture Image'),
+              onPressed: _captureImage,
+              child: const Text("Capture"),
+            ),
+            ElevatedButton(onPressed: _pickImage, child: const Text("Upload")),
+            ElevatedButton(
+              onPressed: _recognizeFaces,
+              child: const Text("Recognize"),
             ),
             ElevatedButton(
-              onPressed: () => _pickFromGallery(context),
-              child: const Text('Upload from Gallery'),
-            ),
-            ElevatedButton(
-              onPressed: _capturedImage == null || _isUploading
-                  ? null
-                  : () => _uploadImage(context),
-              child: _isUploading
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Text('Mark Attendance'),
+              onPressed: _saveAttendance,
+              child: const Text("Save"),
             ),
           ],
         ),
         const SizedBox(height: 10),
+
+        // Attendance Grid
+        Expanded(
+          child: AttendanceGrid(attendance: attendance, onToggle: _toggleRoll),
+        ),
       ],
     );
   }

@@ -37,7 +37,7 @@ class LoginPage extends StatelessWidget {
                     context,
                     MaterialPageRoute(
                       builder: (context) => const TeacherDashboard(
-                        teacherName: 'Dr. Smith',
+                        teacherName: 'Asst. Prof Rencita ',
                         teacherPhotoUrl: 'https://via.placeholder.com/150',
                       ),
                     ),
