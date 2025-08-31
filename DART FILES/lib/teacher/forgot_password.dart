@@ -1,28 +1,21 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../models/teacher_model.dart';
-import 'teacher_dashboard.dart';
-import 'register_teacher.dart';
-import 'forgot_password.dart';
 
-class LoginTeacherPage extends StatefulWidget {
-  const LoginTeacherPage({super.key});
+class ForgotPasswordPage extends StatefulWidget {
+  const ForgotPasswordPage({super.key});
 
   @override
-  State<LoginTeacherPage> createState() => _LoginTeacherPageState();
+  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
 }
 
-class _LoginTeacherPageState extends State<LoginTeacherPage> {
+class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  
   final AuthService _authService = AuthService();
   
   bool _isLoading = false;
-  bool _obscurePassword = true;
 
-  Future<void> _loginTeacher() async {
+  Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -30,35 +23,9 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
     });
 
     try {
-      // Login teacher
-      final userCredential = await _authService.loginTeacher(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-
-      if (userCredential?.user != null) {
-        // Get teacher data
-        final teacher = await _authService.getTeacherData(userCredential!.user!.uid);
-        
-        if (teacher != null) {
-          // Navigate to teacher dashboard
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => TeacherDashboard(
-                  teacherName: teacher.name,
-                  teacherPhotoUrl: teacher.photo.isNotEmpty 
-                      ? teacher.photo 
-                      : 'https://via.placeholder.com/150',
-                ),
-              ),
-            );
-          }
-        } else {
-          _showErrorSnackBar('Teacher profile not found');
-        }
-      }
+      await _authService.resetPassword(_emailController.text.trim());
+      
+      _showSuccessDialog();
     } catch (e) {
       _showErrorSnackBar(e.toString());
     } finally {
@@ -66,6 +33,28 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
         _isLoading = false;
       });
     }
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Password Reset Email Sent'),
+        content: Text(
+          'A password reset link has been sent to ${_emailController.text.trim()}. '
+          'Please check your email and follow the instructions to reset your password.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close dialog
+              Navigator.of(context).pop(); // Go back to login
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showErrorSnackBar(String message) {
@@ -81,7 +70,7 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Teacher Login"),
+        title: const Text("Reset Password"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
@@ -94,21 +83,31 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
             children: [
               const SizedBox(height: 40),
               
-              // Logo/Icon
+              // Icon
               const Icon(
-                Icons.school,
+                Icons.lock_reset,
                 size: 80,
                 color: Colors.indigo,
               ),
               const SizedBox(height: 20),
               
               const Text(
-                "Teacher Portal",
+                "Forgot Password?",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: Colors.indigo,
+                ),
+              ),
+              const SizedBox(height: 10),
+              
+              const Text(
+                "Enter your email address and we'll send you a link to reset your password.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey,
                 ),
               ),
               const SizedBox(height: 40),
@@ -118,9 +117,10 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
-                  labelText: "Email",
+                  labelText: "Email Address",
                   prefixIcon: Icon(Icons.email),
                   border: OutlineInputBorder(),
+                  hintText: "Enter your registered email",
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -132,37 +132,11 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
-
-              // Password Field
-              TextFormField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                decoration: InputDecoration(
-                  labelText: "Password",
-                  prefixIcon: const Icon(Icons.lock),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your password';
-                  }
-                  return null;
-                },
-              ),
               const SizedBox(height: 24),
 
-              // Login Button
+              // Reset Password Button
               ElevatedButton(
-                onPressed: _isLoading ? null : _loginTeacher,
+                onPressed: _isLoading ? null : _resetPassword,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
@@ -184,53 +158,27 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
                             ),
                           ),
                           SizedBox(width: 10),
-                          Text("Logging in..."),
+                          Text("Sending..."),
                         ],
                       )
                     : const Text(
-                        "Login",
+                        "Send Reset Link",
                         style: TextStyle(fontSize: 16),
                       ),
               ),
               const SizedBox(height: 16),
 
-              // Forgot Password Link
-              Center(
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ForgotPasswordPage(),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    "Forgot Password?",
-                    style: TextStyle(
-                      color: Colors.indigo,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Register Link
+              // Back to Login
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text("Don't have an account? "),
+                  const Text("Remember your password? "),
                   TextButton(
                     onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const RegisterTeacherPage(),
-                        ),
-                      );
+                      Navigator.pop(context);
                     },
                     child: const Text(
-                      "Register here",
+                      "Back to Login",
                       style: TextStyle(
                         color: Colors.indigo,
                         fontWeight: FontWeight.bold,
@@ -249,7 +197,6 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
   @override
   void dispose() {
     _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 }

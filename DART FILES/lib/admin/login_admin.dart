@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../models/teacher_model.dart';
-import 'teacher_dashboard.dart';
-import 'register_teacher.dart';
-import 'forgot_password.dart';
+import '../models/admin_model.dart';
+import 'admin_dashboard.dart';
+import 'register_admin.dart';
+import '../teacher/forgot_password.dart';
 
-class LoginTeacherPage extends StatefulWidget {
-  const LoginTeacherPage({super.key});
+class LoginAdminPage extends StatefulWidget {
+  const LoginAdminPage({super.key});
 
   @override
-  State<LoginTeacherPage> createState() => _LoginTeacherPageState();
+  State<LoginAdminPage> createState() => _LoginAdminPageState();
 }
 
-class _LoginTeacherPageState extends State<LoginTeacherPage> {
+class _LoginAdminPageState extends State<LoginAdminPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -22,7 +22,7 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  Future<void> _loginTeacher() async {
+  Future<void> _loginAdmin() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -30,33 +30,37 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
     });
 
     try {
-      // Login teacher
+      // Login admin
       final userCredential = await _authService.loginTeacher(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (userCredential?.user != null) {
-        // Get teacher data
-        final teacher = await _authService.getTeacherData(userCredential!.user!.uid);
+        // Check if user is actually an admin
+        final isAdmin = await _authService.isAdmin(userCredential!.user!.uid);
         
-        if (teacher != null) {
-          // Navigate to teacher dashboard
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => TeacherDashboard(
-                  teacherName: teacher.name,
-                  teacherPhotoUrl: teacher.photo.isNotEmpty 
-                      ? teacher.photo 
-                      : 'https://via.placeholder.com/150',
+        if (isAdmin) {
+          // Get admin data
+          final adminData = await _authService.getAdminData(userCredential.user!.uid);
+          
+          if (adminData != null) {
+            final admin = Admin.fromMap(userCredential.user!.uid, adminData);
+            
+            // Navigate to admin dashboard
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AdminDashboard(admin: admin),
                 ),
-              ),
-            );
+              );
+            }
+          } else {
+            _showErrorSnackBar('Admin profile not found');
           }
         } else {
-          _showErrorSnackBar('Teacher profile not found');
+          _showErrorSnackBar('Invalid admin credentials');
         }
       }
     } catch (e) {
@@ -81,7 +85,7 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Teacher Login"),
+        title: const Text("Admin Login"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
@@ -96,14 +100,14 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
               
               // Logo/Icon
               const Icon(
-                Icons.school,
+                Icons.admin_panel_settings,
                 size: 80,
                 color: Colors.indigo,
               ),
               const SizedBox(height: 20),
               
               const Text(
-                "Teacher Portal",
+                "Admin Portal",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 24,
@@ -162,7 +166,7 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
 
               // Login Button
               ElevatedButton(
-                onPressed: _isLoading ? null : _loginTeacher,
+                onPressed: _isLoading ? null : _loginAdmin,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
@@ -219,18 +223,18 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text("Don't have an account? "),
+                  const Text("Need admin access? "),
                   TextButton(
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const RegisterTeacherPage(),
+                          builder: (context) => const RegisterAdminPage(),
                         ),
                       );
                     },
                     child: const Text(
-                      "Register here",
+                      "Request here",
                       style: TextStyle(
                         color: Colors.indigo,
                         fontWeight: FontWeight.bold,

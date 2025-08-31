@@ -5,19 +5,22 @@ import '../models/teacher_model.dart';
 import '../services/auth_service.dart';
 import '../services/teacher_service.dart';
 
-class RegisterTeacherPage extends StatefulWidget {
-  const RegisterTeacherPage({super.key});
+class EditTeacherProfilePage extends StatefulWidget {
+  final Teacher teacher;
+
+  const EditTeacherProfilePage({super.key, required this.teacher});
 
   @override
-  State<RegisterTeacherPage> createState() => _RegisterTeacherPageState();
+  State<EditTeacherProfilePage> createState() => _EditTeacherProfilePageState();
 }
 
-class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
+class _EditTeacherProfilePageState extends State<EditTeacherProfilePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _designationController = TextEditingController();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   
   final AuthService _authService = AuthService();
@@ -25,11 +28,12 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
   final ImagePicker _imagePicker = ImagePicker();
   
   File? _selectedImage;
-  String? _photoUrl;
   List<String> _selectedClasses = [];
   bool _isLoading = false;
-  bool _obscurePassword = true;
+  bool _obscureCurrentPassword = true;
+  bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
+  bool _changePassword = false;
   
   final List<String> _availableClasses = [
     'AI & DS A', 'AI & DS B', 'AI & DS C',
@@ -38,6 +42,19 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
     'ME A', 'ME B', 'ME C',
     'EEE A', 'EEE B', 'EEE C',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeFields();
+  }
+
+  void _initializeFields() {
+    _nameController.text = widget.teacher.name;
+    _designationController.text = widget.teacher.designation;
+    _emailController.text = widget.teacher.mail;
+    _selectedClasses = List.from(widget.teacher.classes);
+  }
 
   Future<void> _pickImage() async {
     try {
@@ -83,7 +100,7 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
     }
   }
 
-  Future<void> _registerTeacher() async {
+  Future<void> _updateProfile() async {
     if (!_formKey.currentState!.validate()) return;
     
     if (_selectedClasses.isEmpty) {
@@ -96,39 +113,44 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
     });
 
     try {
-      String? photoUrl;
+      String? photoUrl = widget.teacher.photo;
       
-      // Upload photo if selected
+      // Upload new photo if selected
       if (_selectedImage != null) {
         photoUrl = await _teacherService.uploadTeacherPhoto(
-          DateTime.now().millisecondsSinceEpoch.toString(),
+          widget.teacher.id,
           _selectedImage!,
         );
       }
 
-      // Create teacher object
-      Teacher newTeacher = Teacher(
-        id: '', // Will be set by auth service
+      // Update teacher object
+      Teacher updatedTeacher = widget.teacher.copyWith(
         name: _nameController.text.trim(),
-        photo: photoUrl ?? '',
         designation: _designationController.text.trim(),
-        classes: _selectedClasses,
         mail: _emailController.text.trim(),
+        classes: _selectedClasses,
+        photo: photoUrl,
       );
 
-      // Register teacher
-      await _authService.registerTeacher(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        teacherData: newTeacher,
-      );
+      // Update teacher profile
+      await _teacherService.updateTeacherProfile(widget.teacher.id, updatedTeacher);
 
-      _showSuccessSnackBar('Teacher registered successfully!');
+      // Update email if changed
+      if (_emailController.text.trim() != widget.teacher.mail) {
+        await _authService.updateEmail(_emailController.text.trim());
+      }
+
+      // Update password if requested
+      if (_changePassword && _newPasswordController.text.isNotEmpty) {
+        await _authService.updatePassword(_newPasswordController.text.trim());
+      }
+
+      _showSuccessSnackBar('Profile updated successfully!');
       
       // Navigate back after a short delay
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
-          Navigator.pop(context);
+          Navigator.pop(context, updatedTeacher);
         }
       });
 
@@ -163,9 +185,15 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Register Teacher"),
+        title: const Text("Edit Profile"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.save),
+            onPressed: _isLoading ? null : _updateProfile,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -183,8 +211,10 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
                       backgroundColor: Colors.grey[300],
                       backgroundImage: _selectedImage != null 
                           ? FileImage(_selectedImage!) 
-                          : null,
-                      child: _selectedImage == null 
+                          : widget.teacher.photo.isNotEmpty
+                              ? NetworkImage(widget.teacher.photo)
+                              : null,
+                      child: _selectedImage == null && widget.teacher.photo.isEmpty
                           ? const Icon(Icons.person, size: 60, color: Colors.grey)
                           : null,
                     ),
@@ -192,7 +222,7 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
                     TextButton.icon(
                       onPressed: _pickImage,
                       icon: const Icon(Icons.camera_alt),
-                      label: const Text("Select Photo"),
+                      label: const Text("Change Photo"),
                     ),
                   ],
                 ),
@@ -255,62 +285,103 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
               ),
               const SizedBox(height: 16),
 
-              // Password Field
-              TextFormField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                decoration: InputDecoration(
-                  labelText: "Password",
-                  prefixIcon: const Icon(Icons.lock),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a password';
-                  }
-                  if (value.length < 6) {
-                    return 'Password must be at least 6 characters';
-                  }
-                  return null;
+              // Change Password Toggle
+              CheckboxListTile(
+                title: const Text("Change Password"),
+                value: _changePassword,
+                onChanged: (value) {
+                  setState(() {
+                    _changePassword = value ?? false;
+                    if (!_changePassword) {
+                      _currentPasswordController.clear();
+                      _newPasswordController.clear();
+                      _confirmPasswordController.clear();
+                    }
+                  });
                 },
               ),
-              const SizedBox(height: 16),
 
-              // Confirm Password Field
-              TextFormField(
-                controller: _confirmPasswordController,
-                obscureText: _obscureConfirmPassword,
-                decoration: InputDecoration(
-                  labelText: "Confirm Password",
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureConfirmPassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () {
-                      setState(() {
-                        _obscureConfirmPassword = !_obscureConfirmPassword;
-                      });
-                    },
+              // Password Fields (shown only if change password is checked)
+              if (_changePassword) ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _currentPasswordController,
+                  obscureText: _obscureCurrentPassword,
+                  decoration: InputDecoration(
+                    labelText: "Current Password",
+                    prefixIcon: const Icon(Icons.lock),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureCurrentPassword ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () {
+                        setState(() {
+                          _obscureCurrentPassword = !_obscureCurrentPassword;
+                        });
+                      },
+                    ),
                   ),
+                  validator: _changePassword ? (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your current password';
+                    }
+                    return null;
+                  } : null,
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please confirm your password';
-                  }
-                  if (value != _passwordController.text) {
-                    return 'Passwords do not match';
-                  }
-                  return null;
-                },
-              ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _newPasswordController,
+                  obscureText: _obscureNewPassword,
+                  decoration: InputDecoration(
+                    labelText: "New Password",
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureNewPassword ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () {
+                        setState(() {
+                          _obscureNewPassword = !_obscureNewPassword;
+                        });
+                      },
+                    ),
+                  ),
+                  validator: _changePassword ? (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter a new password';
+                    }
+                    if (value.length < 6) {
+                      return 'Password must be at least 6 characters';
+                    }
+                    return null;
+                  } : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: _obscureConfirmPassword,
+                  decoration: InputDecoration(
+                    labelText: "Confirm New Password",
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureConfirmPassword ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () {
+                        setState(() {
+                          _obscureConfirmPassword = !_obscureConfirmPassword;
+                        });
+                      },
+                    ),
+                  ),
+                  validator: _changePassword ? (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please confirm your new password';
+                    }
+                    if (value != _newPasswordController.text) {
+                      return 'Passwords do not match';
+                    }
+                    return null;
+                  } : null,
+                ),
+              ],
               const SizedBox(height: 16),
 
               // Classes Section
@@ -346,9 +417,9 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
               ),
               const SizedBox(height: 24),
 
-              // Register Button
+              // Update Button
               ElevatedButton(
-                onPressed: _isLoading ? null : _registerTeacher,
+                onPressed: _isLoading ? null : _updateProfile,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
@@ -370,11 +441,11 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
                             ),
                           ),
                           SizedBox(width: 10),
-                          Text("Registering..."),
+                          Text("Updating..."),
                         ],
                       )
                     : const Text(
-                        "Register Teacher",
+                        "Update Profile",
                         style: TextStyle(fontSize: 16),
                       ),
               ),
@@ -390,7 +461,8 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
     _nameController.dispose();
     _designationController.dispose();
     _emailController.dispose();
-    _passwordController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }

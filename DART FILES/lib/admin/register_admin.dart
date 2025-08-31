@@ -1,42 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import '../models/teacher_model.dart';
+import '../models/admin_model.dart';
 import '../services/auth_service.dart';
-import '../services/teacher_service.dart';
+import '../services/admin_service.dart';
 
-class RegisterTeacherPage extends StatefulWidget {
-  const RegisterTeacherPage({super.key});
+class RegisterAdminPage extends StatefulWidget {
+  const RegisterAdminPage({super.key});
 
   @override
-  State<RegisterTeacherPage> createState() => _RegisterTeacherPageState();
+  State<RegisterAdminPage> createState() => _RegisterAdminPageState();
 }
 
-class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
+class _RegisterAdminPageState extends State<RegisterAdminPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _designationController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   
   final AuthService _authService = AuthService();
-  final TeacherService _teacherService = TeacherService();
+  final AdminService _adminService = AdminService();
   final ImagePicker _imagePicker = ImagePicker();
   
   File? _selectedImage;
-  String? _photoUrl;
-  List<String> _selectedClasses = [];
+  String _selectedRole = 'admin';
+  List<String> _selectedPermissions = [];
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   
-  final List<String> _availableClasses = [
-    'AI & DS A', 'AI & DS B', 'AI & DS C',
-    'CSE A', 'CSE B', 'CSE C',
-    'ECE A', 'ECE B', 'ECE C',
-    'ME A', 'ME B', 'ME C',
-    'EEE A', 'EEE B', 'EEE C',
+  final List<String> _roles = ['admin', 'super_admin', 'moderator'];
+  final List<String> _availablePermissions = [
+    'manage_teachers',
+    'manage_students',
+    'manage_admins',
+    'view_reports',
+    'system_settings',
+    'backup_data',
+    'user_management',
   ];
 
   Future<void> _pickImage() async {
@@ -83,11 +85,11 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
     }
   }
 
-  Future<void> _registerTeacher() async {
+  Future<void> _registerAdmin() async {
     if (!_formKey.currentState!.validate()) return;
     
-    if (_selectedClasses.isEmpty) {
-      _showErrorSnackBar('Please select at least one class');
+    if (_selectedPermissions.isEmpty) {
+      _showErrorSnackBar('Please select at least one permission');
       return;
     }
 
@@ -100,30 +102,31 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
       
       // Upload photo if selected
       if (_selectedImage != null) {
-        photoUrl = await _teacherService.uploadTeacherPhoto(
+        photoUrl = await _adminService.uploadAdminPhoto(
           DateTime.now().millisecondsSinceEpoch.toString(),
           _selectedImage!,
         );
       }
 
-      // Create teacher object
-      Teacher newTeacher = Teacher(
+      // Create admin object
+      Admin newAdmin = Admin(
         id: '', // Will be set by auth service
         name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
         photo: photoUrl ?? '',
-        designation: _designationController.text.trim(),
-        classes: _selectedClasses,
-        mail: _emailController.text.trim(),
+        role: _selectedRole,
+        permissions: _selectedPermissions,
+        createdAt: DateTime.now(),
       );
 
-      // Register teacher
-      await _authService.registerTeacher(
+      // Register admin
+      await _authService.registerAdmin(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        teacherData: newTeacher,
+        adminData: newAdmin.toMap(),
       );
 
-      _showSuccessSnackBar('Teacher registered successfully!');
+      _showSuccessSnackBar('Admin registered successfully!');
       
       // Navigate back after a short delay
       Future.delayed(const Duration(seconds: 2), () {
@@ -163,7 +166,7 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Register Teacher"),
+        title: const Text("Register Admin"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
@@ -185,7 +188,7 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
                           ? FileImage(_selectedImage!) 
                           : null,
                       child: _selectedImage == null 
-                          ? const Icon(Icons.person, size: 60, color: Colors.grey)
+                          ? const Icon(Icons.admin_panel_settings, size: 60, color: Colors.grey)
                           : null,
                     ),
                     const SizedBox(height: 10),
@@ -237,20 +240,24 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
               ),
               const SizedBox(height: 16),
 
-              // Designation Field
-              TextFormField(
-                controller: _designationController,
+              // Role Dropdown
+              DropdownButtonFormField<String>(
+                value: _selectedRole,
                 decoration: const InputDecoration(
-                  labelText: "Designation",
-                  prefixIcon: Icon(Icons.work),
+                  labelText: "Role",
+                  prefixIcon: Icon(Icons.admin_panel_settings),
                   border: OutlineInputBorder(),
-                  hintText: "e.g., Assistant Professor, Professor",
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your designation';
-                  }
-                  return null;
+                items: _roles.map((role) {
+                  return DropdownMenuItem(
+                    value: role,
+                    child: Text(role.replaceAll('_', ' ').toUpperCase()),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedRole = value!;
+                  });
                 },
               ),
               const SizedBox(height: 16),
@@ -313,9 +320,9 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
               ),
               const SizedBox(height: 16),
 
-              // Classes Section
+              // Permissions Section
               const Text(
-                "Select Classes",
+                "Select Permissions",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
@@ -326,16 +333,16 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
                 ),
                 child: Column(
                   children: [
-                    ..._availableClasses.map((className) {
+                    ..._availablePermissions.map((permission) {
                       return CheckboxListTile(
-                        title: Text(className),
-                        value: _selectedClasses.contains(className),
+                        title: Text(permission.replaceAll('_', ' ').toUpperCase()),
+                        value: _selectedPermissions.contains(permission),
                         onChanged: (bool? value) {
                           setState(() {
                             if (value == true) {
-                              _selectedClasses.add(className);
+                              _selectedPermissions.add(permission);
                             } else {
-                              _selectedClasses.remove(className);
+                              _selectedPermissions.remove(permission);
                             }
                           });
                         },
@@ -348,7 +355,7 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
 
               // Register Button
               ElevatedButton(
-                onPressed: _isLoading ? null : _registerTeacher,
+                onPressed: _isLoading ? null : _registerAdmin,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
@@ -374,7 +381,7 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
                         ],
                       )
                     : const Text(
-                        "Register Teacher",
+                        "Register Admin",
                         style: TextStyle(fontSize: 16),
                       ),
               ),
@@ -388,7 +395,6 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
   @override
   void dispose() {
     _nameController.dispose();
-    _designationController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();

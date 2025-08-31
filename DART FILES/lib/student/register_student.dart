@@ -1,42 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import '../models/teacher_model.dart';
+import '../models/student_model.dart';
 import '../services/auth_service.dart';
-import '../services/teacher_service.dart';
+import '../services/student_service.dart';
 
-class RegisterTeacherPage extends StatefulWidget {
-  const RegisterTeacherPage({super.key});
+class RegisterStudentPage extends StatefulWidget {
+  const RegisterStudentPage({super.key});
 
   @override
-  State<RegisterTeacherPage> createState() => _RegisterTeacherPageState();
+  State<RegisterStudentPage> createState() => _RegisterStudentPageState();
 }
 
-class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
+class _RegisterStudentPageState extends State<RegisterStudentPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _designationController = TextEditingController();
+  final _rollNumberController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _parentContactController = TextEditingController();
+  final _addressController = TextEditingController();
   
   final AuthService _authService = AuthService();
-  final TeacherService _teacherService = TeacherService();
+  final StudentService _studentService = StudentService();
   final ImagePicker _imagePicker = ImagePicker();
   
   File? _selectedImage;
-  String? _photoUrl;
-  List<String> _selectedClasses = [];
+  String _selectedSection = 'A';
+  String _selectedDepartment = 'AI & DS';
+  String _selectedYear = '1st Year';
+  DateTime? _selectedDateOfBirth;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   
-  final List<String> _availableClasses = [
-    'AI & DS A', 'AI & DS B', 'AI & DS C',
-    'CSE A', 'CSE B', 'CSE C',
-    'ECE A', 'ECE B', 'ECE C',
-    'ME A', 'ME B', 'ME C',
-    'EEE A', 'EEE B', 'EEE C',
+  final List<String> _sections = ['A', 'B', 'C'];
+  final List<String> _departments = [
+    'AI & DS', 'CSE', 'ECE', 'ME', 'EEE', 'Civil', 'Chemical'
+  ];
+  final List<String> _years = [
+    '1st Year', '2nd Year', '3rd Year', '4th Year'
   ];
 
   Future<void> _pickImage() async {
@@ -83,11 +88,26 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
     }
   }
 
-  Future<void> _registerTeacher() async {
+  Future<void> _selectDateOfBirth() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(const Duration(days: 6570)), // 18 years ago
+      firstDate: DateTime(1990),
+      lastDate: DateTime.now(),
+    );
+    
+    if (picked != null) {
+      setState(() {
+        _selectedDateOfBirth = picked;
+      });
+    }
+  }
+
+  Future<void> _registerStudent() async {
     if (!_formKey.currentState!.validate()) return;
     
-    if (_selectedClasses.isEmpty) {
-      _showErrorSnackBar('Please select at least one class');
+    if (_selectedDateOfBirth == null) {
+      _showErrorSnackBar('Please select your date of birth');
       return;
     }
 
@@ -100,30 +120,36 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
       
       // Upload photo if selected
       if (_selectedImage != null) {
-        photoUrl = await _teacherService.uploadTeacherPhoto(
+        photoUrl = await _studentService.uploadStudentPhoto(
           DateTime.now().millisecondsSinceEpoch.toString(),
           _selectedImage!,
         );
       }
 
-      // Create teacher object
-      Teacher newTeacher = Teacher(
+      // Create student object
+      Student newStudent = Student(
         id: '', // Will be set by auth service
         name: _nameController.text.trim(),
+        rollNumber: _rollNumberController.text.trim(),
+        email: _emailController.text.trim(),
         photo: photoUrl ?? '',
-        designation: _designationController.text.trim(),
-        classes: _selectedClasses,
-        mail: _emailController.text.trim(),
+        section: _selectedSection,
+        department: _selectedDepartment,
+        year: _selectedYear,
+        phoneNumber: _phoneController.text.trim(),
+        parentContact: _parentContactController.text.trim(),
+        dateOfBirth: _selectedDateOfBirth!,
+        address: _addressController.text.trim(),
       );
 
-      // Register teacher
-      await _authService.registerTeacher(
+      // Register student
+      await _authService.registerStudent(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        teacherData: newTeacher,
+        studentData: newStudent.toMap(),
       );
 
-      _showSuccessSnackBar('Teacher registered successfully!');
+      _showSuccessSnackBar('Student registered successfully!');
       
       // Navigate back after a short delay
       Future.delayed(const Duration(seconds: 2), () {
@@ -163,7 +189,7 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Register Teacher"),
+        title: const Text("Register Student"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
@@ -216,6 +242,24 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
               ),
               const SizedBox(height: 16),
 
+              // Roll Number Field
+              TextFormField(
+                controller: _rollNumberController,
+                decoration: const InputDecoration(
+                  labelText: "Roll Number",
+                  prefixIcon: Icon(Icons.badge),
+                  border: OutlineInputBorder(),
+                  hintText: "e.g., 1CR22AD006",
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter your roll number';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
               // Email Field
               TextFormField(
                 controller: _emailController,
@@ -237,18 +281,147 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
               ),
               const SizedBox(height: 16),
 
-              // Designation Field
+              // Phone Number Field
               TextFormField(
-                controller: _designationController,
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(
-                  labelText: "Designation",
-                  prefixIcon: Icon(Icons.work),
+                  labelText: "Phone Number",
+                  prefixIcon: Icon(Icons.phone),
                   border: OutlineInputBorder(),
-                  hintText: "e.g., Assistant Professor, Professor",
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your designation';
+                    return 'Please enter your phone number';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Parent Contact Field
+              TextFormField(
+                controller: _parentContactController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: "Parent Contact",
+                  prefixIcon: Icon(Icons.contact_phone),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter parent contact';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Date of Birth Field
+              InkWell(
+                onTap: _selectDateOfBirth,
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: "Date of Birth",
+                    prefixIcon: Icon(Icons.calendar_today),
+                    border: OutlineInputBorder(),
+                  ),
+                  child: Text(
+                    _selectedDateOfBirth != null
+                        ? "${_selectedDateOfBirth!.day}/${_selectedDateOfBirth!.month}/${_selectedDateOfBirth!.year}"
+                        : "Select Date of Birth",
+                    style: TextStyle(
+                      color: _selectedDateOfBirth != null ? Colors.black : Colors.grey,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Department Dropdown
+              DropdownButtonFormField<String>(
+                value: _selectedDepartment,
+                decoration: const InputDecoration(
+                  labelText: "Department",
+                  prefixIcon: Icon(Icons.school),
+                  border: OutlineInputBorder(),
+                ),
+                items: _departments.map((department) {
+                  return DropdownMenuItem(
+                    value: department,
+                    child: Text(department),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedDepartment = value!;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Year and Section Row
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedYear,
+                      decoration: const InputDecoration(
+                        labelText: "Year",
+                        prefixIcon: Icon(Icons.class_),
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _years.map((year) {
+                        return DropdownMenuItem(
+                          value: year,
+                          child: Text(year),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedYear = value!;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedSection,
+                      decoration: const InputDecoration(
+                        labelText: "Section",
+                        prefixIcon: Icon(Icons.group),
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _sections.map((section) {
+                        return DropdownMenuItem(
+                          value: section,
+                          child: Text(section),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedSection = value!;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Address Field
+              TextFormField(
+                controller: _addressController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: "Address",
+                  prefixIcon: Icon(Icons.home),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter your address';
                   }
                   return null;
                 },
@@ -311,44 +484,11 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
-
-              // Classes Section
-              const Text(
-                "Select Classes",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  children: [
-                    ..._availableClasses.map((className) {
-                      return CheckboxListTile(
-                        title: Text(className),
-                        value: _selectedClasses.contains(className),
-                        onChanged: (bool? value) {
-                          setState(() {
-                            if (value == true) {
-                              _selectedClasses.add(className);
-                            } else {
-                              _selectedClasses.remove(className);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ],
-                ),
-              ),
               const SizedBox(height: 24),
 
               // Register Button
               ElevatedButton(
-                onPressed: _isLoading ? null : _registerTeacher,
+                onPressed: _isLoading ? null : _registerStudent,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
@@ -374,7 +514,7 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
                         ],
                       )
                     : const Text(
-                        "Register Teacher",
+                        "Register Student",
                         style: TextStyle(fontSize: 16),
                       ),
               ),
@@ -388,10 +528,13 @@ class _RegisterTeacherPageState extends State<RegisterTeacherPage> {
   @override
   void dispose() {
     _nameController.dispose();
-    _designationController.dispose();
+    _rollNumberController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _phoneController.dispose();
+    _parentContactController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 }

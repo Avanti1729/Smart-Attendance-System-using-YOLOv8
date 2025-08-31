@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../models/teacher_model.dart';
-import 'teacher_dashboard.dart';
-import 'register_teacher.dart';
-import 'forgot_password.dart';
+import '../models/student_model.dart';
+import 'student_dashboard.dart';
+import 'register_student.dart';
+import '../teacher/forgot_password.dart';
 
-class LoginTeacherPage extends StatefulWidget {
-  const LoginTeacherPage({super.key});
+class LoginStudentPage extends StatefulWidget {
+  const LoginStudentPage({super.key});
 
   @override
-  State<LoginTeacherPage> createState() => _LoginTeacherPageState();
+  State<LoginStudentPage> createState() => _LoginStudentPageState();
 }
 
-class _LoginTeacherPageState extends State<LoginTeacherPage> {
+class _LoginStudentPageState extends State<LoginStudentPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -22,7 +22,7 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  Future<void> _loginTeacher() async {
+  Future<void> _loginStudent() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -30,33 +30,37 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
     });
 
     try {
-      // Login teacher
+      // Login student
       final userCredential = await _authService.loginTeacher(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (userCredential?.user != null) {
-        // Get teacher data
-        final teacher = await _authService.getTeacherData(userCredential!.user!.uid);
+        // Check if user is actually a student
+        final isStudent = await _authService.isStudent(userCredential!.user!.uid);
         
-        if (teacher != null) {
-          // Navigate to teacher dashboard
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => TeacherDashboard(
-                  teacherName: teacher.name,
-                  teacherPhotoUrl: teacher.photo.isNotEmpty 
-                      ? teacher.photo 
-                      : 'https://via.placeholder.com/150',
+        if (isStudent) {
+          // Get student data
+          final studentData = await _authService.getStudentData(userCredential.user!.uid);
+          
+          if (studentData != null) {
+            final student = Student.fromMap(userCredential.user!.uid, studentData);
+            
+            // Navigate to student dashboard
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => StudentProfile(student: student),
                 ),
-              ),
-            );
+              );
+            }
+          } else {
+            _showErrorSnackBar('Student profile not found');
           }
         } else {
-          _showErrorSnackBar('Teacher profile not found');
+          _showErrorSnackBar('Invalid student credentials');
         }
       }
     } catch (e) {
@@ -81,7 +85,7 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Teacher Login"),
+        title: const Text("Student Login"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
@@ -96,14 +100,14 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
               
               // Logo/Icon
               const Icon(
-                Icons.school,
+                Icons.person,
                 size: 80,
                 color: Colors.indigo,
               ),
               const SizedBox(height: 20),
               
               const Text(
-                "Teacher Portal",
+                "Student Portal",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 24,
@@ -162,7 +166,7 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
 
               // Login Button
               ElevatedButton(
-                onPressed: _isLoading ? null : _loginTeacher,
+                onPressed: _isLoading ? null : _loginStudent,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
@@ -225,7 +229,7 @@ class _LoginTeacherPageState extends State<LoginTeacherPage> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const RegisterTeacherPage(),
+                          builder: (context) => const RegisterStudentPage(),
                         ),
                       );
                     },
