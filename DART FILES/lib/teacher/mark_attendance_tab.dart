@@ -102,6 +102,15 @@ class _MarkAttendanceTabState extends State<MarkAttendanceTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(res['message'] ?? "Attendance saved")),
       );
+      // ✅ Navigate back to Teacher Profile page
+      Future.delayed(const Duration(seconds: 1), () {
+        Navigator.pop(context); // Goes back
+        // OR use this if you want to directly go to TeacherProfilePage:
+        // Navigator.pushReplacement(
+        //   context,
+        //   MaterialPageRoute(builder: (context) => const TeacherProfilePage()),
+        // );
+      });
     } catch (e) {
       ScaffoldMessenger.of(
         context,

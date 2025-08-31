@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
 class ApiService {
-  static const String baseUrl = "http://10.201.13.42:5000";
+  static const String baseUrl = "http://192.168.0.3:5000";
 
   static Future<Map<String, dynamic>> recognizeFace(File file) async {
     final uri = Uri.parse("$baseUrl/recognize");
