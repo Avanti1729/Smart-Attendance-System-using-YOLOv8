@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/student_model.dart';
+import '../services/attendance_service.dart';
+import '../models/attendance_model.dart';
 
 class StudentAttendancePage extends StatefulWidget {
   final Student? student;
@@ -13,54 +15,97 @@ class StudentAttendancePage extends StatefulWidget {
 class _StudentAttendancePageState extends State<StudentAttendancePage> {
   String _selectedPeriod = 'This Month';
   final List<String> _periods = ['This Week', 'This Month', 'This Semester', 'This Year'];
+  final AttendanceService _attendanceService = AttendanceService();
   
-  // Sample attendance data
-  final Map<String, dynamic> _attendanceData = {
-    'overall': 78.5,
-    'totalClasses': 45,
-    'attended': 35,
-    'absent': 10,
-    'subjects': {
-      'Machine Learning': {'attended': 8, 'total': 10, 'percentage': 80.0},
-      'Data Structures': {'attended': 7, 'total': 9, 'percentage': 77.8},
-      'Database Systems': {'attended': 6, 'total': 8, 'percentage': 75.0},
-      'Software Engineering': {'attended': 9, 'total': 10, 'percentage': 90.0},
-      'Computer Networks': {'attended': 5, 'total': 8, 'percentage': 62.5},
-    },
-    'recentAttendance': [
-      {'date': '2024-01-15', 'subject': 'Machine Learning', 'status': 'Present'},
-      {'date': '2024-01-15', 'subject': 'Data Structures', 'status': 'Present'},
-      {'date': '2024-01-14', 'subject': 'Database Systems', 'status': 'Absent'},
-      {'date': '2024-01-14', 'subject': 'Software Engineering', 'status': 'Present'},
-      {'date': '2024-01-13', 'subject': 'Computer Networks', 'status': 'Present'},
-    ],
-  };
+  AttendanceSummary? _attendanceSummary;
+  List<AttendanceRecord> _recentAttendance = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAttendanceData();
+  }
+
+  Future<void> _loadAttendanceData() async {
+    if (widget.student?.rollNumber == null) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Get date range based on selected period
+      DateTime endDate = DateTime.now();
+      DateTime startDate = _getStartDateForPeriod(endDate);
+
+      // Load attendance summary
+      _attendanceSummary = await _attendanceService.getStudentAttendanceSummary(
+        studentRollNumber: widget.student!.rollNumber,
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      // Load recent attendance
+      _recentAttendance = await _attendanceService.getRecentAttendance(
+        widget.student!.rollNumber,
+      );
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading attendance: ${e.toString()}')),
+      );
+    }
+  }
+
+  DateTime _getStartDateForPeriod(DateTime endDate) {
+    switch (_selectedPeriod) {
+      case 'This Week':
+        return endDate.subtract(const Duration(days: 7));
+      case 'This Month':
+        return DateTime(endDate.year, endDate.month, 1);
+      case 'This Semester':
+        return endDate.subtract(const Duration(days: 120));
+      case 'This Year':
+        return DateTime(endDate.year, 1, 1);
+      default:
+        return DateTime(endDate.year, endDate.month, 1);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header with filter
-            _buildHeader(),
-            const SizedBox(height: 20),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header with filter
+                  _buildHeader(),
+                  const SizedBox(height: 20),
 
-            // Overall Attendance Card
-            _buildOverallAttendanceCard(),
-            const SizedBox(height: 20),
+                  // Overall Attendance Card
+                  _buildOverallAttendanceCard(),
+                  const SizedBox(height: 20),
 
-            // Subject-wise Attendance
-            _buildSubjectWiseAttendance(),
-            const SizedBox(height: 20),
+                  // Subject-wise Attendance
+                  _buildSubjectWiseAttendance(),
+                  const SizedBox(height: 20),
 
-            // Recent Attendance
-            _buildRecentAttendance(),
-          ],
-        ),
-      ),
+                  // Recent Attendance
+                  _buildRecentAttendance(),
+                ],
+              ),
+            ),
     );
   }
 
@@ -91,6 +136,7 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
                 setState(() {
                   _selectedPeriod = value!;
                 });
+                _loadAttendanceData(); // Reload data when period changes
               },
             ),
           ],
@@ -100,7 +146,16 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
   }
 
   Widget _buildOverallAttendanceCard() {
-    final percentage = _attendanceData['overall'];
+    if (_attendanceSummary == null) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Text('No attendance data available'),
+        ),
+      );
+    }
+    
+    final percentage = _attendanceSummary!.attendancePercentage;
     final color = _getAttendanceColor(percentage);
     
     return Card(
@@ -131,7 +186,7 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
                         ),
                       ),
                       Text(
-                        '${_attendanceData['attended']} out of ${_attendanceData['totalClasses']} classes',
+                        '${_attendanceSummary!.attendedClasses} out of ${_attendanceSummary!.totalClasses} classes',
                         style: TextStyle(color: Colors.grey[600]),
                       ),
                     ],
@@ -175,21 +230,21 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
                 Expanded(
                   child: _buildAttendanceMetric(
                     'Present',
-                    '${_attendanceData['attended']}',
+                    '${_attendanceSummary!.attendedClasses}',
                     Colors.green,
                   ),
                 ),
                 Expanded(
                   child: _buildAttendanceMetric(
                     'Absent',
-                    '${_attendanceData['absent']}',
+                    '${_attendanceSummary!.totalClasses - _attendanceSummary!.attendedClasses}',
                     Colors.red,
                   ),
                 ),
                 Expanded(
                   child: _buildAttendanceMetric(
                     'Total Classes',
-                    '${_attendanceData['totalClasses']}',
+                    '${_attendanceSummary!.totalClasses}',
                     Colors.blue,
                   ),
                 ),
@@ -202,6 +257,15 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
   }
 
   Widget _buildSubjectWiseAttendance() {
+    if (_attendanceSummary == null || _attendanceSummary!.subjectWise.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text('No subject-wise data available'),
+        ),
+      );
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -216,11 +280,11 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
               ),
             ),
             const SizedBox(height: 16),
-            ...(_attendanceData['subjects'] as Map<String, dynamic>).entries.map(
+            ..._attendanceSummary!.subjectWise.entries.map(
               (entry) {
                 final subject = entry.key;
                 final data = entry.value;
-                final percentage = data['percentage'];
+                final percentage = data.percentage;
                 final color = _getAttendanceColor(percentage);
                 
                 return Padding(
@@ -236,7 +300,7 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                           Text(
-                            '${data['attended']}/${data['total']}',
+                            '${data.attendedClasses}/${data.totalClasses}',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ],
@@ -273,6 +337,15 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
   }
 
   Widget _buildRecentAttendance() {
+    if (_recentAttendance.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text('No recent attendance records'),
+        ),
+      );
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -287,31 +360,33 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
               ),
             ),
             const SizedBox(height: 12),
-            ...(_attendanceData['recentAttendance'] as List).map(
+            ..._recentAttendance.map(
               (record) => ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: record['status'] == 'Present' 
+                  backgroundColor: record.isPresent 
                       ? Colors.green.withOpacity(0.1)
                       : Colors.red.withOpacity(0.1),
                   child: Icon(
-                    record['status'] == 'Present' ? Icons.check : Icons.close,
-                    color: record['status'] == 'Present' ? Colors.green : Colors.red,
+                    record.isPresent ? Icons.check : Icons.close,
+                    color: record.isPresent ? Colors.green : Colors.red,
                   ),
                 ),
-                title: Text(record['subject']),
-                subtitle: Text(record['date']),
+                title: Text(record.subject),
+                subtitle: Text(
+                  '${record.date.day}/${record.date.month}/${record.date.year}',
+                ),
                 trailing: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: record['status'] == 'Present' 
+                    color: record.isPresent 
                         ? Colors.green.withOpacity(0.1)
                         : Colors.red.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    record['status'],
+                    record.isPresent ? 'Present' : 'Absent',
                     style: TextStyle(
-                      color: record['status'] == 'Present' ? Colors.green : Colors.red,
+                      color: record.isPresent ? Colors.green : Colors.red,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
