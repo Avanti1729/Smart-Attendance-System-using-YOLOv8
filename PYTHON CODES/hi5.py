@@ -184,7 +184,7 @@ def recognize():
     embeddings_db, _ = load_db()
     faces = face_app.get(img)
     results = []
-    marked_ids = []
+    marked_rolls = []
 
     if not faces:
         return jsonify({"status": "ok", "results": [], "marked_rolls": []})
@@ -206,18 +206,18 @@ def recognize():
         })
 
         # extract roll number
-        
-        if student != "Unknown":
-            marked_ids.append(student)
+        m = re.search(r'AD0*([0-9]+)', student)
+        if m:
+            marked_rolls.append(int(m.group(1)))
 
     # Save attendance CSV
-    save_attendance_csv(marked_ids)
+    save_attendance_csv(marked_rolls)
 
     return jsonify({
         "status": "ok",
         "results": results,
-        "marked_ids": marked_ids,
-        "message": f"{len(marked_ids)} students marked present"
+        "marked_rolls": marked_rolls,
+        "message": f"{len(marked_rolls)} students marked present"
     })
 @app.route("/mark_manual", methods=["POST"])
 def mark_manual():
