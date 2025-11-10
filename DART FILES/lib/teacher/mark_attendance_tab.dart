@@ -649,57 +649,6 @@ class _MarkAttendanceTabState extends State<MarkAttendanceTab> {
     }
   }
 
-  void _showAllPossibleUSNs() {
-    List<String> allUSNs = _usnGeneratorService.getAllPossibleUSNsForSection(
-      selectedSection,
-      department: selectedDepartment,
-    );
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          "All Possible USNs - Section $selectedSection ($selectedDepartment)",
-        ),
-        content: Container(
-          width: double.maxFinite,
-          height: 400,
-          child: Column(
-            children: [
-              Text("Total: ${allUSNs.length} USNs"),
-              Text("Active: ${attendance.length} students"),
-              const SizedBox(height: 10),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: allUSNs.length,
-                  itemBuilder: (context, index) {
-                    String usn = allUSNs[index];
-                    bool isActive = attendance.containsKey(usn);
-                    return ListTile(
-                      title: Text(usn),
-                      trailing: Icon(
-                        isActive ? Icons.check_circle : Icons.circle_outlined,
-                        color: isActive ? Colors.green : Colors.grey,
-                      ),
-                      subtitle: Text(
-                        isActive ? "Active Profile" : "No Profile",
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Close"),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   void dispose() {
@@ -838,14 +787,7 @@ class _MarkAttendanceTabState extends State<MarkAttendanceTab> {
         ),
         const SizedBox(height: 5),
 
-        // Additional utility button
-        Center(
-          child: ElevatedButton(
-            onPressed: _showAllPossibleUSNs,
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-            child: const Text("Show All USNs"),
-          ),
-        ),
+        const SizedBox(height: 10),
         const SizedBox(height: 10),
 
         // Attendance Grid
