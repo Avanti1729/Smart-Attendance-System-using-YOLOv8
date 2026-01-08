@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/student_model.dart';
+import '../models/attendance_model.dart';
 import '../services/auth_service.dart';
 import '../services/student_service.dart';
+import '../services/attendance_service.dart';
 import 'student_attendance.dart';
 import 'student_schedule.dart';
 import 'student_assignments.dart';
@@ -20,6 +22,7 @@ class StudentProfile extends StatefulWidget {
 class _StudentProfileState extends State<StudentProfile> with TickerProviderStateMixin {
   final AuthService _authService = AuthService();
   final StudentService _studentService = StudentService();
+  final AttendanceService _attendanceService = AttendanceService();
   
   late TabController _tabController;
   Student? _currentStudent;
@@ -65,12 +68,20 @@ class _StudentProfileState extends State<StudentProfile> with TickerProviderStat
 
   Future<Map<String, dynamic>> _getStudentStats(Student student) async {
     try {
-      // Sample data - In real app, this would come from attendance records
+      // Fetch real attendance data
+      AttendanceSummary attendanceSummary = await _attendanceService.getStudentAttendanceSummary(
+        studentRollNumber: student.rollNumber,
+      );
+      
+      // Calculate subject count from attendance summary
+      int totalSubjects = attendanceSummary.subjectWise.length;
+      
+      // Sample data for other stats (these would come from other services in a complete app)
       return {
-        'attendancePercentage': 78.5,
-        'totalClasses': 45,
-        'attendedClasses': 35,
-        'totalSubjects': 6,
+        'attendancePercentage': attendanceSummary.attendancePercentage,
+        'totalClasses': attendanceSummary.totalClasses,
+        'attendedClasses': attendanceSummary.attendedClasses,
+        'totalSubjects': totalSubjects > 0 ? totalSubjects : 6, // Default to 6 if no subjects found
         'assignmentsDue': 4,
         'tasksCompleted': 12,
         'totalTasks': 15,
@@ -79,13 +90,16 @@ class _StudentProfileState extends State<StudentProfile> with TickerProviderStat
         'gpa': 8.2,
         'rank': 15,
         'totalStudents': 120,
+        'subjectWiseAttendance': attendanceSummary.subjectWise,
       };
     } catch (e) {
+      print('Error fetching student stats: ${e.toString()}');
+      // Return default values if attendance fetch fails
       return {
         'attendancePercentage': 0.0,
         'totalClasses': 0,
         'attendedClasses': 0,
-        'totalSubjects': 0,
+        'totalSubjects': 6,
         'assignmentsDue': 0,
         'tasksCompleted': 0,
         'totalTasks': 0,
@@ -94,6 +108,7 @@ class _StudentProfileState extends State<StudentProfile> with TickerProviderStat
         'gpa': 0.0,
         'rank': 0,
         'totalStudents': 0,
+        'subjectWiseAttendance': <String, SubjectAttendance>{},
       };
     }
   }
@@ -558,12 +573,7 @@ class _StudentProfileState extends State<StudentProfile> with TickerProviderStat
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
-                  _buildSubjectPerformance('Machine Learning', 8.5, 92),
-                  _buildSubjectPerformance('Data Structures', 7.8, 88),
-                  _buildSubjectPerformance('Database Systems', 8.2, 85),
-                  _buildSubjectPerformance('Software Engineering', 8.0, 90),
-                  _buildSubjectPerformance('Computer Networks', 7.5, 82),
-                  _buildSubjectPerformance('Operating Systems', 8.3, 87),
+                  ..._buildSubjectPerformanceList(),
                 ],
               ),
             ),
@@ -726,6 +736,44 @@ class _StudentProfileState extends State<StudentProfile> with TickerProviderStat
     );
   }
 
+  List<Widget> _buildSubjectPerformanceList() {
+    Map<String, SubjectAttendance> subjectWiseAttendance = 
+        _dashboardStats['subjectWiseAttendance'] as Map<String, SubjectAttendance>? ?? {};
+    
+    if (subjectWiseAttendance.isEmpty) {
+      // Show default subjects if no real data is available
+      return [
+        _buildSubjectPerformance('Machine Learning', 8.5, 92),
+        _buildSubjectPerformance('Data Structures', 7.8, 88),
+        _buildSubjectPerformance('Database Systems', 8.2, 85),
+        _buildSubjectPerformance('Software Engineering', 8.0, 90),
+        _buildSubjectPerformance('Computer Networks', 7.5, 82),
+        _buildSubjectPerformance('Operating Systems', 8.3, 87),
+      ];
+    }
+    
+    // Build performance widgets from real attendance data
+    return subjectWiseAttendance.entries.map((entry) {
+      String subject = entry.key;
+      SubjectAttendance attendance = entry.value;
+      
+      // Generate mock grades for demonstration (in a real app, this would come from grades service)
+      double mockGrade = _generateMockGrade(attendance.percentage);
+      
+      return _buildSubjectPerformance(subject, mockGrade, attendance.percentage.round());
+    }).toList();
+  }
+
+  double _generateMockGrade(double attendancePercentage) {
+    // Generate a mock grade based on attendance percentage
+    // This is just for demonstration - in a real app, grades would come from a separate service
+    if (attendancePercentage >= 90) return 8.5 + (attendancePercentage - 90) / 10 * 1.5;
+    if (attendancePercentage >= 80) return 8.0 + (attendancePercentage - 80) / 10 * 0.5;
+    if (attendancePercentage >= 70) return 7.0 + (attendancePercentage - 70) / 10 * 1.0;
+    if (attendancePercentage >= 60) return 6.0 + (attendancePercentage - 60) / 10 * 1.0;
+    return 5.0 + attendancePercentage / 60 * 1.0;
+  }
+
   Widget _buildSubjectPerformance(String subject, double grade, int attendance) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -735,9 +783,12 @@ class _StudentProfileState extends State<StudentProfile> with TickerProviderStat
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                subject,
-                style: const TextStyle(fontWeight: FontWeight.w500),
+              Expanded(
+                child: Text(
+                  subject,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               Text(
                 'Grade: ${grade.toStringAsFixed(1)}',
